@@ -10,6 +10,7 @@ typedef struct {
   f64 radius;
   f64 x;
   f64 y;
+  b8 hover;
 } Node;
 
 typedef struct {
@@ -57,38 +58,35 @@ void remove_node() {
   for (i64 i = 0; i < MAX_NUM_NODES; ++i) {
     Node n = nodes[i];
 
-    f64 cx = platform.cursor_x;
-    f64 cy = platform.cursor_y;
+    if (n.enabled && n.hover) {
+      nodes[i].enabled = 0;
 
-    if (n.enabled)
-      if (cx >= n.x - n.radius && cx <= n.x + n.radius &&
-          cy >= n.y - n.radius && cy <= n.y + n.radius) {
-        nodes[i].enabled = 0;
+      for (i64 j = 0; j < MAX_NUM_EDGES; ++j) {
+        Edge e = edges[j];
 
-        for (i64 j = 0; j < MAX_NUM_EDGES; ++j) {
-          Edge e = edges[j];
-
-          if (e.src == i || e.dst == i) {
-            edges[j].enabled = 0;
-          }
+        if (e.src == i || e.dst == i) {
+          edges[j].enabled = 0;
         }
-
-        return;
       }
+
+      return;
+    }
   }
 }
 
-void draw_edge() {}
+void remove_edge() {
+  for (i64 i = 0; i < MAX_NUM_EDGES; ++i) {
+    Edge e = edges[i];
+
+    if (e.enabled && e.hover) {
+      edges[i].enabled = 0;
+
+      return;
+    }
+  }
+}
 
 void draw_graph(void) {
-  for (i64 i = 0; i < MAX_NUM_NODES; ++i) {
-    Node n = nodes[i];
-
-    if (n.enabled)
-      fill_ellipse(OP_SET, 0, n.x - n.radius, n.y - n.radius, n.radius * 2,
-                   n.radius * 2);
-  }
-
   for (i64 i = 0; i < MAX_NUM_EDGES; ++i) {
     Edge e = edges[i];
     Node n0 = nodes[e.src];
@@ -96,19 +94,69 @@ void draw_graph(void) {
 
     // FIXME: color of line on node
     if (e.enabled)
-      fill_line(OP_SET, 0x003f00, n0.x, n0.y, n1.x, n1.y, e.width);
+      fill_line(OP_SET, e.hover ? 0x005f00 : 0, n0.x, n0.y, n1.x, n1.y,
+                e.width);
+  }
+
+  for (i64 i = 0; i < MAX_NUM_NODES; ++i) {
+    Node n = nodes[i];
+
+    if (n.enabled)
+      fill_ellipse(OP_SET, n.hover ? 0x002f00 : 0, n.x - n.radius,
+                   n.y - n.radius, n.radius * 2, n.radius * 2);
   }
 }
 
+void update_edge(i64 edge_index) {
+  f64 x = platform.cursor_x;
+  f64 y = platform.cursor_y;
+
+  Edge e = edges[edge_index];
+  Node n0 = nodes[e.src];
+  Node n1 = nodes[e.dst];
+
+  edges[edge_index].hover =
+      line_contains(n0.x, n0.y, n1.x, n1.y, e.width, x, y);
+}
+
+void update_node(i64 node_index) {
+  f64 x = platform.cursor_x;
+  f64 y = platform.cursor_y;
+
+  Node n = nodes[node_index];
+
+  nodes[node_index].hover =
+      ellipse_contains(n.x - n.radius, n.y - n.radius, n.radius * 2,
+                       n.radius * 2, platform.cursor_x, platform.cursor_y
+
+      );
+}
+
 i32 main() {
+  platform = (Platform){
+      .title = "Graph",
+      .frame_width = 960,
+      .frame_height = 720,
+  };
+
   p_init();
 
-  add_node(50, 50);
+  b8 adding_edge = 0;
+  i64 adding_src = 0;
+  i64 adding_dst = 0;
+
+  add_node(100, 100);
+  add_node(300, 100);
+  add_node(120, 300);
+
   add_edge(0, 1);
-  add_node(150, 150);
+  add_edge(0, 2);
+  add_edge(1, 2);
 
   while (!platform.done) {
     p_wait_events();
+
+    b8 hover_node = 0;
 
     fill_rectangle(OP_SET, 0xffffff, 0, 0, platform.frame_width,
                    platform.frame_height);
@@ -120,15 +168,61 @@ i32 main() {
     }
 
     if (platform.key_pressed[KEY_DELETE]) {
-      f64 x = platform.cursor_x;
-      f64 y = platform.cursor_y;
-
       remove_node();
+      remove_edge();
     }
 
-    /* if (platform.key_pressed[BUTTON_RIGHT] && platform.key_pressed[MOD_CTRL])
-     * { */
-    /* } */
+    for (i64 i = 0; i < MAX_NUM_NODES; ++i) {
+      if (nodes[i].enabled) {
+        update_node(i);
+        if (nodes[i].hover)
+          hover_node = 1;
+      }
+    }
+
+    for (i64 i = 0; i < MAX_NUM_EDGES; ++i) {
+      if (hover_node) {
+        edges[i].hover = 0;
+      } else {
+        update_edge(i);
+      }
+    }
+
+    if (platform.key_pressed[BUTTON_RIGHT])
+      for (i64 i = 0; i < MAX_NUM_NODES; ++i) {
+        if (nodes[i].enabled && nodes[i].hover) {
+          adding_edge = 1;
+          adding_src = i;
+          adding_dst = i;
+          break;
+        }
+      }
+
+    if (adding_edge) {
+      f64 x0 = nodes[adding_src].x;
+      f64 y0 = nodes[adding_src].y;
+      f64 x1 = platform.cursor_x;
+      f64 y1 = platform.cursor_y;
+
+      /* if (adding_src != adding_dst) { */
+      /*   x1 = nodes[adding_dst].x; */
+      /*   y1 = nodes[adding_dst].y; */
+      /* } */
+
+      fill_line(OP_SET, 0x7f007f, x0, y0, x1, y1, 30);
+    }
+
+    if (adding_edge)
+      for (i64 i = 0; i < MAX_NUM_NODES; ++i)
+        if (nodes[i].enabled && nodes[i].hover) {
+          adding_dst = i;
+          break;
+        }
+
+    if (adding_edge && !platform.key_down[BUTTON_RIGHT]) {
+      adding_edge = 0;
+      add_edge(adding_src, adding_dst);
+    }
 
     draw_graph();
 
