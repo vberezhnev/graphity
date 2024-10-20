@@ -26,6 +26,11 @@ enum {
   OP_XOR,
 };
 
+b8 rectangle_contains(f64 x0, f64 y0, f64 width, f64 height,          f64 px, f64 py);
+b8 triangle_contains (f64 x0, f64 y0, f64 x1, f64 y1, f64 x2, f64 y2, f64 px, f64 py);
+b8 ellipse_contains  (f64 x0, f64 y0, f64 width, f64 height,          f64 px, f64 py);
+b8 line_contains     (f64 x0, f64 y0, f64 x1, f64 y1, f64 width,      f64 px, f64 py);
+
 u32  u32_from_rgb         (f32 red, f32 green, f32 blue);
 void fill_rectangle       (u32 op, u32 color, f64 x0, f64 y0, f64 width, f64 height);
 void fill_triangle        (u32 op, u32 color, f64 x0, f64 y0, f64 x1, f64 y1, f64 x2, f64 y2);
@@ -300,6 +305,67 @@ void put_pixel(i64 i, i64 j, u32 op, u32 color) {
     platform.pixels[j * platform.frame_width + i]  = color;
 }
 
+b8 rectangle_contains(f64 x0, f64 y0, f64 width, f64 height, f64 px, f64 py) {
+  return px >= x0 && px < x0 + width && py >= y0 && py < y0 + height;
+}
+
+b8 triangle_contains(f64 x0, f64 y0, f64 x1, f64 y1, f64 x2, f64 y2, f64 px, f64 py) {
+  //  Z-components of cross-products
+  //
+
+  f64 z0  = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0);
+  f64 z1  = (x2 - x1) * (y0 - y1) - (x0 - x1) * (y2 - y1);
+  f64 z2  = (x0 - x2) * (y1 - y2) - (x1 - x2) * (y0 - y2);
+
+  f64 pz0 = (px - x0) * (y2 - y0) - (x2 - x0) * (py - y0);
+  f64 pz1 = (px - x1) * (y0 - y1) - (x0 - x1) * (py - y1);
+  f64 pz2 = (px - x2) * (y1 - y2) - (x1 - x2) * (py - y2);
+
+  return
+       same_sign(z0, pz0)
+    && same_sign(z1, pz1)
+    && same_sign(z2, pz2);
+}
+
+b8 ellipse_contains(f64 x0, f64 y0, f64 width, f64 height, f64 px, f64 py) {
+  f64 dw = width  / 2;
+  f64 dh = height / 2;
+
+  if (dw < EPSILON || dh < EPSILON)
+    return 0;
+
+  f64 cx = x0 + dw;
+  f64 cy = y0 + dh;
+  f64 kx = 1. / dw;
+  f64 ky = 1. / dh;
+
+  f64 dx = (px - cx) * kx;
+  f64 dy = (py - cy) * ky;
+
+  return dx * dx + dy * dy - 1.0 < EPSILON;
+}
+
+b8 line_contains(f64 x0, f64 y0, f64 x1, f64 y1, f64 width, f64 px, f64 py) {
+  f64 dx = x1 - x0;
+  f64 dy = y1 - y0;
+
+  //  Tangent
+  //
+  f64 tx = -dy;
+  f64 ty = dx;
+  f64 tl = sqrt(tx * tx + ty * ty);
+  if (tl >= EPSILON) {
+    tx /= tl;
+    ty /= tl;
+  }
+  tx *= width * .5;
+  ty *= width * .5;
+
+  return
+       triangle_contains(x0 - tx, y0 - ty, x0 + tx, y0 + ty, x1 + tx, y1 + ty, px, py)
+    || triangle_contains(x0 - tx, y0 - ty, x1 + tx, y1 + ty, x1 - tx, y1 - ty, px, py);
+}
+
 void fill_rectangle(u32 op, u32 color, f64 x0, f64 y0, f64 width, f64 height) {
   i64 i0 = (i64) floor(x0 + .5);
   i64 j0 = (i64) floor(y0 + .5);
@@ -322,31 +388,10 @@ void fill_triangle(u32 op, u32 color, f64 x0, f64 y0, f64 x1, f64 y1, f64 x2, f6
   i64 max_x = (i64) ceil (max3(x0, x1, x2));
   i64 max_y = (i64) ceil (max3(y0, y1, y2));
 
-  //  Z-components of cross-products
-  //
-  f64 z0 = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0);
-  f64 z1 = (x2 - x1) * (y0 - y1) - (x0 - x1) * (y2 - y1);
-  f64 z2 = (x0 - x2) * (y1 - y2) - (x1 - x2) * (y0 - y2);
-
   for (i64 j = min_y; j <= max_y; ++j)
-    for (i64 i = min_x; i <= max_x; ++i) {
-      f64 x = (f64) i;
-      f64 y = (f64) j;
-
-      //  Z-components of cross-products
-      //
-      f64 pz0 = (x - x0) * (y2 - y0) - (x2 - x0) * (y - y0);
-      f64 pz1 = (x - x1) * (y0 - y1) - (x0 - x1) * (y - y1);
-      f64 pz2 = (x - x2) * (y1 - y2) - (x1 - x2) * (y - y2);
-
-      //  Check signs
-      //
-      if (!same_sign(z0, pz0)) continue;
-      if (!same_sign(z1, pz1)) continue;
-      if (!same_sign(z2, pz2)) continue;
-
-      put_pixel(i, j, op, color);
-    }  
+    for (i64 i = min_x; i <= max_x; ++i)
+      if (triangle_contains(x0, y0, x1, y1, x2, y2, (f64) i, (f64) j))
+        put_pixel(i, j, op, color);
 }
 
 void fill_ellipse(u32 op, u32 color, f64 x0, f64 y0, f64 width, f64 height) {
@@ -358,27 +403,13 @@ void fill_ellipse(u32 op, u32 color, f64 x0, f64 y0, f64 width, f64 height) {
   i64 i1 = (i64) floor(x0 + width + .5);
   i64 j1 = (i64) floor(y0 + height + .5);
 
-  f64 dw = width  / 2;
-  f64 dh = height / 2;
-
-  if (dw < EPSILON || dh < EPSILON)
-    return;
-
-  f64 cx = x0 + dw;
-  f64 cy = y0 + dh;
-  f64 kx = 1. / dw;
-  f64 ky = 1. / dh;
-
   for (i64 j = j0; j < j1; ++j) {
     if (j < 0 || j >= platform.frame_height)
       continue;
-    f64 dy   = (((f64) j) - cy) * ky;
-    f64 dydy = dy * dy;
     for (i64 i = i0; i < i1; ++i) {
       if (i < 0 || i >= platform.frame_width)
         continue;
-      f64 dx = (((f64) i) - cx) * kx;
-      if (dx * dx + dydy <= 1.0)
+      if (ellipse_contains(x0, y0, width, height, (f64) i, (f64) j))
         put_pixel(i, j, op, color);
     }
   }
