@@ -330,7 +330,7 @@ b8 nodes_overlap() {
       }
     }
   }
-  return 0; 
+  return 0;
 }
 
 void move_overlapping_nodes(i64 node1_idx, i64 node2_idx) {
@@ -353,6 +353,23 @@ void move_overlapping_nodes(i64 node1_idx, i64 node2_idx) {
     n2.y += move_distance * sin(angle);
 
     nodes[node2_idx] = n2;
+  }
+}
+
+void remove_latest_node() {
+  for (i64 i = MAX_NUM_NODES - 1; i >= 0; --i) {
+    if (nodes[i].enabled) {
+      // Remove the node and its associated edges
+      nodes[i].enabled = 0;
+
+      for (i64 j = 0; j < MAX_NUM_EDGES; ++j) {
+        if (edges[j].enabled && (edges[j].src == i || edges[j].dst == i)) {
+          edges[j].enabled = 0;
+        }
+      }
+
+      return;
+    }
   }
 }
 
@@ -403,8 +420,9 @@ i32 main() {
       f64 y = platform.cursor_y;
 
       if (!nodes_overlap()) {
-        add_node(x, y); 
+        add_node(x, y);
       } else {
+        remove_latest_node();
         printf("Error: Cannot add node, overlapping nodes detected.\n");
       }
 
