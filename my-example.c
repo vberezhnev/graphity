@@ -1,4 +1,5 @@
 #include "graphics.c"
+#include <stdio.h>
 
 enum {
   MAX_NUM_EDGES = 1024,
@@ -11,7 +12,7 @@ typedef struct {
   f64 x;
   f64 y;
   b8 hover;
-  /* b8 highlight; */
+  b8 highlight;
   f64 distance;
   f64 weight;
 } Node;
@@ -22,7 +23,7 @@ typedef struct {
   i64 dst;
   f64 width;
   b8 hover;
-  /* b8 hightlight; */
+  b8 highlight;
 } Edge;
 
 Node nodes[MAX_NUM_EDGES] = {0};
@@ -97,18 +98,30 @@ void draw_graph(void) {
     Node n0 = nodes[e.src];
     Node n1 = nodes[e.dst];
 
+    u32 color = 0x7f7f7f; // grey color
+
+    if (e.highlight)
+      color = 0xff00ff; // pink color
+    if (e.hover)
+      color = 0x007f00; // green color
+
     // FIXME: color of line on node
     if (e.enabled)
-      fill_line(OP_SET, e.hover ? 0x005f00 : 0, n0.x, n0.y, n1.x, n1.y,
-                e.width);
+      fill_line(OP_SET, color, n0.x, n0.y, n1.x, n1.y, e.width);
   }
 
   for (i64 i = 0; i < MAX_NUM_NODES; ++i) {
     Node n = nodes[i];
+    u32 color = 0x7f7f7f; // grey color
+
+    if (n.highlight)
+      color = 0xfff0ff; // no name color
+    if (n.hover)
+      color = 0x007f00; // green color
 
     if (n.enabled)
-      fill_ellipse(OP_SET, n.hover ? 0x002f00 : 0, n.x - n.radius,
-                   n.y - n.radius, n.radius * 2, n.radius * 2);
+      fill_ellipse(OP_SET, color, n.x - n.radius, n.y - n.radius, n.radius * 2,
+                   n.radius * 2);
   }
 }
 
@@ -156,12 +169,12 @@ b8 validate_edge(i64 edge_idx) {
 
 void clear_node_edge_highlight() {
   for (i64 i = 0; i < MAX_NUM_NODES; ++i) {
-    nodes[i].hover = 0;
+    nodes[i].highlight = 0;
     nodes[i].distance = -1;
   }
 
   for (i64 i = 0; i < MAX_NUM_EDGES; ++i) {
-    edges[i].hover = 0;
+    edges[i].highlight = 0;
   }
 }
 
@@ -169,8 +182,8 @@ void highlight_path(i64 src, i64 dst) {
   clear_node_edge_highlight();
 
   // Set initial conditions
-  nodes[src].hover = 1;
-  nodes[dst].hover = 1;
+  nodes[src].highlight = 1;
+  nodes[dst].highlight = 1;
   nodes[src].distance = 0;
 
   // Finding the shortest path using a distance-driven search
@@ -259,12 +272,43 @@ void highlight_path(i64 src, i64 dst) {
     }
 
     // Highlight the current node and edge as part of the path
-    nodes[next_node_idx].hover = 1;
-    edges[edge_to_highlight].hover = 1;
+    nodes[next_node_idx].highlight = 1;
+    edges[edge_to_highlight].highlight = 1;
 
     // Move to the next node in the path
     curr_node_idx = next_node_idx;
   }
+}
+
+i32 readInt(FILE *f) {
+  i32 x;
+  fscanf(f, "%d", &x);
+
+  return x;
+}
+
+void writeInt(FILE *f, i32 value) { fprintf(f, "%d ", value); }
+
+i32 nodes_count() {
+  i32 count = 0;
+
+  for (i64 i = 0; i < MAX_NUM_NODES; ++i) {
+    if (nodes[i].enabled)
+      ++count;
+  }
+
+  return count;
+}
+
+i32 edges_count() {
+  i32 count = 0;
+
+  for (i64 i = 0; i < MAX_NUM_EDGES; ++i) {
+    if (edges[i].enabled)
+      ++count;
+  }
+
+  return count;
 }
 
 i32 main() {
@@ -284,13 +328,23 @@ i32 main() {
   i64 path_src = -1;
   i64 path_dst = -1;
 
-  add_node(100, 100);
-  add_node(300, 100);
-  add_node(120, 300);
+  {
+    FILE *n = fopen("coords-write.txt", "rb");
 
-  add_edge(0, 1);
-  add_edge(0, 2);
-  add_edge(1, 2);
+    i32 num_nodes = readInt(n);
+
+    for (i64 i = 0; i < num_nodes; ++i) {
+      add_node(readInt(n), readInt(n));
+    };
+
+    i32 num_edges = readInt(n);
+
+    for (i64 i = 0; i < num_edges; ++i) {
+      add_edge(readInt(n), readInt(n));
+    };
+
+    fclose(n);
+  }
 
   while (!platform.done) {
     p_wait_events();
@@ -378,7 +432,7 @@ i32 main() {
 
     if (path_changed) {
       highlight_path(path_src, path_dst);
-      // path_changed = 0; // FIXME: if enabled, highlight isn't showing
+      path_changed = 0; // FIXME: if enabled, highlight isn't showing
     }
 
     draw_graph();
@@ -387,5 +441,30 @@ i32 main() {
   }
 
   p_cleanup();
+
+  {
+    FILE *n = fopen("coords-write.txt", "wb");
+
+    writeInt(n, nodes_count());
+
+    for (i64 i = 0; i < MAX_NUM_NODES; ++i) {
+      if (nodes[i].enabled) {
+        writeInt(n, (i32)nodes[i].x);
+        writeInt(n, (i32)nodes[i].y);
+      }
+    };
+
+    writeInt(n, edges_count());
+
+    for (i64 i = 0; i < MAX_NUM_EDGES; ++i) {
+      if (edges[i].enabled) {
+        writeInt(n, edges[i].src);
+        writeInt(n, edges[i].dst);
+      }
+    };
+
+    fclose(n);
+  }
+
   return 0;
 }
