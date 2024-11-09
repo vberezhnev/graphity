@@ -1,5 +1,5 @@
-#include "lib/graphics.c"
 #include "graph.h"
+#include "lib/graphics.c"
 #include <stdio.h>
 
 void draw_graph(void) {
@@ -36,12 +36,12 @@ void draw_graph(void) {
 }
 
 void highlight_path(i64 src, i64 dst) {
+  clear_node_edge_highlight();
+
   if (!validate_node(src) || !validate_node(dst)) {
     printf("Invalid source or destination node index.\n");
     return;
   }
-
-  clear_node_edge_highlight();
 
   // Set initial conditions
   nodes[src].highlight = 1;
