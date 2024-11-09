@@ -1,11 +1,22 @@
 #ifndef GRAPH_H
 #define GRAPH_H
 
-#include "node.h"
 #include "edge.h"
+#include "node.h"
 #include "utils.h"
-#include <stdio.h>
 #include <math.h>
+#include <stdio.h>
+
+b8 validate_node(i64 node_idx) {
+  return (node_idx >= 0) && (node_idx < MAX_NUM_NODES) &&
+         nodes[node_idx].enabled;
+}
+
+b8 validate_edge(i64 edge_idx) {
+  return (edge_idx >= 0) && (edge_idx < MAX_NUM_EDGES) &&
+         edges[edge_idx].enabled && validate_node(edges[edge_idx].src) &&
+         validate_node(edges[edge_idx].dst);
+}
 
 void add_node(f64 x, f64 y) {
   for (i64 j = 0; j < MAX_NUM_NODES; ++j) {
@@ -36,6 +47,9 @@ void add_node(f64 x, f64 y) {
 }
 
 void add_edge(i64 src, i64 dst) {
+  assert(src >= 0 && src < MAX_NUM_NODES);
+  assert(dst >= 0 && dst < MAX_NUM_NODES);
+
   for (i64 i = 0; i < MAX_NUM_EDGES; ++i) {
     if (!edges[i].enabled) {
       edges[i] = (Edge){
@@ -83,6 +97,11 @@ void remove_edge() {
 }
 
 void update_edge(i64 edge_index) {
+  assert(edge_index >= 0 && edge_index < MAX_NUM_EDGES);
+  assert(edges[edge_index].enabled);
+  assert(validate_node(edges[edge_index].src));
+  assert(validate_node(edges[edge_index].dst));
+
   f64 x = platform.cursor_x;
   f64 y = platform.cursor_y;
 
@@ -92,17 +111,6 @@ void update_edge(i64 edge_index) {
 
   edges[edge_index].hover =
       line_contains(n0.x, n0.y, n1.x, n1.y, e.width, x, y);
-}
-
-b8 validate_node(i64 node_idx) {
-  return (node_idx >= 0) && (node_idx < MAX_NUM_NODES) &&
-         nodes[node_idx].enabled;
-}
-
-b8 validate_edge(i64 edge_idx) {
-  return (edge_idx >= 0) && (edge_idx < MAX_NUM_EDGES) &&
-         edges[edge_idx].enabled && validate_node(edges[edge_idx].src) &&
-         validate_node(edges[edge_idx].dst);
 }
 
 #endif

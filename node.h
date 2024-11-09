@@ -18,6 +18,8 @@ typedef struct {
 Node nodes[MAX_NUM_EDGES] = {0};
 
 void update_node(i64 node_index) {
+	assert(node_index >= 0 && node_index < MAX_NUM_NODES);
+	
   f64 x = platform.cursor_x;
   f64 y = platform.cursor_y;
 
