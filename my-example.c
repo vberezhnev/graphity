@@ -30,6 +30,18 @@ Node nodes[MAX_NUM_EDGES] = {0};
 Edge edges[MAX_NUM_EDGES] = {0};
 
 void add_node(f64 x, f64 y) {
+  for (i64 j = 0; j < MAX_NUM_NODES; ++j) {
+    Node n2 = nodes[j];
+    if (!n2.enabled) {
+      continue;
+    }
+
+    if (fabs(x - n2.x) < 50 + n2.radius && fabs(y - n2.y) < 50 + n2.radius) {
+      printf("Error: Cannot add node, overlapping nodes detected.\n");
+      return;
+    }
+  }
+
   for (i64 i = 0; i < MAX_NUM_NODES; ++i) {
     if (!nodes[i].enabled) {
       nodes[i] = (Node){
@@ -311,68 +323,6 @@ i32 edges_count() {
   return count;
 }
 
-b8 nodes_overlap() {
-  for (i64 i = 0; i < MAX_NUM_NODES - 1; ++i) {
-    Node n1 = nodes[i];
-    if (!n1.enabled) {
-      continue;
-    }
-
-    for (i64 j = i + 1; j < MAX_NUM_NODES; ++j) {
-      Node n2 = nodes[j];
-      if (!n2.enabled) {
-        continue;
-      }
-
-      if (fabs(n1.x - n2.x) < n1.radius + n2.radius &&
-          fabs(n1.y - n2.y) < n1.radius + n2.radius) {
-        return 1; // Nodes overlap
-      }
-    }
-  }
-  return 0;
-}
-
-void move_overlapping_nodes(i64 node1_idx, i64 node2_idx) {
-  Node n1 = nodes[node1_idx];
-  Node n2 = nodes[node2_idx];
-
-  f64 dx = n1.x - n2.x;
-  f64 dy = n1.y - n2.y;
-  f64 distance = sqrt(dx * dx + dy * dy);
-
-  // minimum distance required to separate the nodes
-  f64 min_distance = n1.radius + n2.radius;
-
-  if (distance < min_distance) {
-    f64 move_distance = min_distance - distance;
-    f64 angle = atan2(dy, dx);
-
-    // Move node 2 away from node 1
-    n2.x += move_distance * cos(angle);
-    n2.y += move_distance * sin(angle);
-
-    nodes[node2_idx] = n2;
-  }
-}
-
-void remove_latest_node() {
-  for (i64 i = MAX_NUM_NODES - 1; i >= 0; --i) {
-    if (nodes[i].enabled) {
-      // Remove the node and its associated edges
-      nodes[i].enabled = 0;
-
-      for (i64 j = 0; j < MAX_NUM_EDGES; ++j) {
-        if (edges[j].enabled && (edges[j].src == i || edges[j].dst == i)) {
-          edges[j].enabled = 0;
-        }
-      }
-
-      return;
-    }
-  }
-}
-
 i32 main() {
   platform = (Platform){
       .title = "Graph",
@@ -389,6 +339,12 @@ i32 main() {
   b8 path_changed = 0;
   i64 path_src = -1;
   i64 path_dst = -1;
+
+  b8 dragging = 0;
+  i64 drag_node_index = -1;
+
+  f64 offset_x = 0;
+  f64 offset_y = 0;
 
   {
     FILE *n = fopen("coords-write.txt", "rb");
@@ -415,37 +371,68 @@ i32 main() {
 
     fill_rectangle(OP_SET, 0xffffff, 0, 0, platform.frame_width,
                    platform.frame_height);
+
+    if (platform.key_pressed[BUTTON_RIGHT])
+      for (i64 i = 0; i < MAX_NUM_NODES; ++i) {
+        if (nodes[i].enabled && nodes[i].hover) {
+          adding_edge = 1;
+          adding_src = i;
+          adding_dst = i;
+          break;
+        }
+      }
+
     if (platform.key_pressed[BUTTON_LEFT]) {
       f64 x = platform.cursor_x;
       f64 y = platform.cursor_y;
+      b8 node_found = 0;
 
-      if (!nodes_overlap()) {
-        add_node(x, y);
-      } else {
-        remove_latest_node();
-        printf("Error: Cannot add node, overlapping nodes detected.\n");
+      for (i64 i = 0; i < MAX_NUM_NODES; ++i) {
+        if (nodes[i].enabled && nodes[i].hover) {
+          drag_node_index = i;
+          dragging = 1;
+          node_found = 1;
+
+          offset_x = nodes[i].x - platform.cursor_x;
+          offset_y = nodes[i].y - platform.cursor_y;
+        }
       }
 
-      /* if (nodes_overlap()) { */
-      /*   for (i64 i = 0; i < MAX_NUM_NODES - 1; ++i) { */
-      /*     Node n1 = nodes[i]; */
-      /*     if (!n1.enabled) { */
-      /*       continue; */
-      /*     } */
+      if (!node_found)
+        add_node(x, y);
+      path_changed = 1;
+    }
 
-      /*     for (i64 j = i + 1; j < MAX_NUM_NODES; ++j) { */
-      /*       Node n2 = nodes[j]; */
-      /*       if (!n2.enabled) { */
-      /*         continue; */
-      /*       } */
+    if (!platform.key_down[BUTTON_LEFT]) {
+      dragging = 0;
+      path_changed = 1;
+      drag_node_index = -1;
+    }
 
-      /*       if (fabs(n1.x - n2.x) < n1.radius + n2.radius && */
-      /*           fabs(n1.y - n2.y) < n1.radius + n2.radius) { */
-      /*         move_overlapping_nodes(i, j); */
-      /*       } */
-      /*     } */
-      /*   } */
-      /* } */
+    if (dragging) {
+      b8 overlap = 0;
+
+      for (i64 j = 0; j < MAX_NUM_NODES; ++j) {
+        if (j == drag_node_index)
+          continue;
+
+        Node n2 = nodes[j];
+        if (!n2.enabled) {
+          continue;
+        }
+
+        if (fabs(platform.cursor_x + offset_x - n2.x) < 50 + n2.radius &&
+            fabs(platform.cursor_y + offset_y - n2.y) < 50 + n2.radius) {
+          printf("Error: Cannot add node, overlapping nodes detected.\n");
+
+          overlap = 1;
+        }
+      }
+
+      if (!overlap) {
+        nodes[drag_node_index].x = platform.cursor_x + offset_x;
+        nodes[drag_node_index].y = platform.cursor_y + offset_y;
+      }
     }
 
     if (platform.key_pressed[KEY_DELETE]) {
