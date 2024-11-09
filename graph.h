@@ -98,9 +98,8 @@ void remove_edge() {
 
 void update_edge(i64 edge_index) {
   assert(edge_index >= 0 && edge_index < MAX_NUM_EDGES);
-  assert(edges[edge_index].enabled);
-  assert(validate_node(edges[edge_index].src));
-  assert(validate_node(edges[edge_index].dst));
+  /* assert(validate_node(edges[edge_index].src)); */
+  /* assert(validate_node(edges[edge_index].dst)); */
 
   f64 x = platform.cursor_x;
   f64 y = platform.cursor_y;

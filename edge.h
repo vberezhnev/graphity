@@ -1,7 +1,7 @@
 #ifndef EDGE_H
 #define EDGE_H
 
-#include "node.h"
+#include "lib/graphics.c"
 
 enum {
   MAX_NUM_NODES = 1024,

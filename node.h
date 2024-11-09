@@ -1,7 +1,6 @@
 #ifndef NODE_H
 #define NODE_H
 
-#include "lib/graphics.c"
 #include "edge.h"
 
 typedef struct {
