@@ -112,15 +112,17 @@ void highlight_path(i64 src, i64 dst) {
       Node node0 = nodes[edge.src];
       Node node1 = nodes[edge.dst];
 
+      f64 l = get_distance(node0.x, node0.y, node1.x, node1.y);
+			
       // Check for the nearest node along the current path
       if (edge.src == curr_node_idx && node1.distance >= 0 &&
-          node1.distance < dist) {
+          node1.distance < node1.distance < (dist < 0 || node1.distance + l < dist)) {
         next_node_idx = edge.dst;
         edge_to_highlight = i;
         dist = node1.distance;
       }
       if (edge.dst == curr_node_idx && node0.distance >= 0 &&
-          node0.distance < dist) {
+          node0.distance < (dist < 0 || node0.distance + l < dist)) {
         next_node_idx = edge.src;
         edge_to_highlight = i;
         dist = node0.distance;
@@ -180,13 +182,19 @@ i32 main() {
     i32 num_nodes = readInt(n);
 
     for (i64 i = 0; i < num_nodes; ++i) {
-      add_node(readInt(n), readInt(n));
+			f64 x = readInt(n);
+			f64 y = readInt(n);
+			
+      add_node(x, y);
     };
 
     i32 num_edges = readInt(n);
 
     for (i64 i = 0; i < num_edges; ++i) {
-      add_edge(readInt(n), readInt(n));
+			i32 src = readInt(n);
+			i32 dst = readInt(n);
+			
+      add_edge(src, dst);
     };
 
     fclose(n);
