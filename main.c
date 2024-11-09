@@ -1,108 +1,6 @@
-#include "graphics.c"
+#include "lib/graphics.c"
+#include "graph.h"
 #include <stdio.h>
-
-enum {
-  MAX_NUM_EDGES = 1024,
-  MAX_NUM_NODES = 1024,
-};
-
-typedef struct {
-  b8 enabled;
-  f64 radius;
-  f64 x;
-  f64 y;
-  b8 hover;
-  b8 highlight;
-  f64 distance;
-  f64 weight;
-} Node;
-
-typedef struct {
-  b8 enabled;
-  i64 src;
-  i64 dst;
-  f64 width;
-  b8 hover;
-  b8 highlight;
-} Edge;
-
-Node nodes[MAX_NUM_EDGES] = {0};
-Edge edges[MAX_NUM_EDGES] = {0};
-
-void add_node(f64 x, f64 y) {
-  for (i64 j = 0; j < MAX_NUM_NODES; ++j) {
-    Node n2 = nodes[j];
-    if (!n2.enabled) {
-      continue;
-    }
-
-    if (fabs(x - n2.x) < 50 + n2.radius && fabs(y - n2.y) < 50 + n2.radius) {
-      printf("Error: Cannot add node, overlapping nodes detected.\n");
-      return;
-    }
-  }
-
-  for (i64 i = 0; i < MAX_NUM_NODES; ++i) {
-    if (!nodes[i].enabled) {
-      nodes[i] = (Node){
-          .enabled = 1,
-          .x = x,
-          .y = y,
-          .radius = 50,
-          .weight = 2,
-      };
-
-      return;
-    }
-  }
-}
-
-void add_edge(i64 src, i64 dst) {
-  for (i64 i = 0; i < MAX_NUM_EDGES; ++i) {
-    if (!edges[i].enabled) {
-      edges[i] = (Edge){
-          .enabled = 1,
-          .src = src,
-          .dst = dst,
-          .width = 35,
-      };
-
-      return;
-    }
-  }
-}
-
-void remove_node() {
-  for (i64 i = 0; i < MAX_NUM_NODES; ++i) {
-    Node n = nodes[i];
-
-    if (n.enabled && n.hover) {
-      nodes[i].enabled = 0;
-
-      for (i64 j = 0; j < MAX_NUM_EDGES; ++j) {
-        Edge e = edges[j];
-
-        if (e.src == i || e.dst == i) {
-          edges[j].enabled = 0;
-        }
-      }
-
-      return;
-    }
-  }
-}
-
-void remove_edge() {
-  for (i64 i = 0; i < MAX_NUM_EDGES; ++i) {
-    Edge e = edges[i];
-
-    if (e.enabled && e.hover) {
-      edges[i].enabled = 0;
-
-      return;
-    }
-  }
-}
 
 void draw_graph(void) {
   for (i64 i = 0; i < MAX_NUM_EDGES; ++i) {
@@ -137,60 +35,12 @@ void draw_graph(void) {
   }
 }
 
-void update_edge(i64 edge_index) {
-  f64 x = platform.cursor_x;
-  f64 y = platform.cursor_y;
-
-  Edge e = edges[edge_index];
-  Node n0 = nodes[e.src];
-  Node n1 = nodes[e.dst];
-
-  edges[edge_index].hover =
-      line_contains(n0.x, n0.y, n1.x, n1.y, e.width, x, y);
-}
-
-void update_node(i64 node_index) {
-  f64 x = platform.cursor_x;
-  f64 y = platform.cursor_y;
-
-  Node n = nodes[node_index];
-
-  nodes[node_index].hover =
-      ellipse_contains(n.x - n.radius, n.y - n.radius, n.radius * 2,
-                       n.radius * 2, platform.cursor_x, platform.cursor_y
-
-      );
-}
-
-f64 get_distance(f64 x0, f64 y0, f64 x1, f64 y1) {
-  f64 dx = x1 - x0;
-  f64 dy = y1 - y0;
-  return sqrt(dx * dx + dy * dy);
-}
-
-b8 validate_node(i64 node_idx) {
-  return (node_idx >= 0) && (node_idx < MAX_NUM_NODES) &&
-         nodes[node_idx].enabled;
-}
-
-b8 validate_edge(i64 edge_idx) {
-  return (edge_idx >= 0) && (edge_idx < MAX_NUM_EDGES) &&
-         edges[edge_idx].enabled && validate_node(edges[edge_idx].src) &&
-         validate_node(edges[edge_idx].dst);
-}
-
-void clear_node_edge_highlight() {
-  for (i64 i = 0; i < MAX_NUM_NODES; ++i) {
-    nodes[i].highlight = 0;
-    nodes[i].distance = -1;
-  }
-
-  for (i64 i = 0; i < MAX_NUM_EDGES; ++i) {
-    edges[i].highlight = 0;
-  }
-}
-
 void highlight_path(i64 src, i64 dst) {
+  if (!validate_node(src) || !validate_node(dst)) {
+    printf("Invalid source or destination node index.\n");
+    return;
+  }
+
   clear_node_edge_highlight();
 
   // Set initial conditions
@@ -300,28 +150,6 @@ i32 readInt(FILE *f) {
 }
 
 void writeInt(FILE *f, i32 value) { fprintf(f, "%d ", value); }
-
-i32 nodes_count() {
-  i32 count = 0;
-
-  for (i64 i = 0; i < MAX_NUM_NODES; ++i) {
-    if (nodes[i].enabled)
-      ++count;
-  }
-
-  return count;
-}
-
-i32 edges_count() {
-  i32 count = 0;
-
-  for (i64 i = 0; i < MAX_NUM_EDGES; ++i) {
-    if (edges[i].enabled)
-      ++count;
-  }
-
-  return count;
-}
 
 i32 main() {
   platform = (Platform){
@@ -474,12 +302,6 @@ i32 main() {
 
       fill_line(OP_SET, 0x7f007f, x0, y0, x1, y1, 30);
     }
-
-    /* for (i64 i = 0; i < MAX_NUM_NODES; ++i) { */
-    /*   if (nodes[i].enabled && (nodes[i].x == platform.cursor_x)) { */
-    /*     printf("NONONONO"); */
-    /*   } */
-    /* }; */
 
     if (adding_edge)
       for (i64 i = 0; i < MAX_NUM_NODES; ++i)
