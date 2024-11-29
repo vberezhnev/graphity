@@ -1,12 +1,13 @@
 #include "graph.h"
 #include "lib/graphics.c"
 #include <stdio.h>
+#include "algorithms.h"
 
 void draw_graph(void) {
   for (i64 i = 0; i < MAX_NUM_EDGES; ++i) {
-    Edge e = edges[i];
-    Node n0 = nodes[e.src];
-    Node n1 = nodes[e.dst];
+    Edge e = graph.edges[i];
+    Node n0 = graph.nodes[e.src];
+    Node n1 = graph.nodes[e.dst];
 
     u32 color = 0x7f7f7f; // grey color
 
@@ -21,7 +22,7 @@ void draw_graph(void) {
   }
 
   for (i64 i = 0; i < MAX_NUM_NODES; ++i) {
-    Node n = nodes[i];
+    Node n = graph.nodes[i];
     u32 color = 0x7f7f7f; // grey color
 
     if (n.highlight)
@@ -32,115 +33,6 @@ void draw_graph(void) {
     if (n.enabled)
       fill_ellipse(OP_SET, color, n.x - n.radius, n.y - n.radius, n.radius * 2,
                    n.radius * 2);
-  }
-}
-
-void highlight_path(i64 src, i64 dst) {
-  clear_node_edge_highlight();
-
-  if (!validate_node(src) || !validate_node(dst)) {
-    printf("Invalid source or destination node index.\n");
-    return;
-  }
-
-  // Set initial conditions
-  nodes[src].highlight = 1;
-  nodes[dst].highlight = 1;
-  nodes[src].distance = 0;
-
-  // Finding the shortest path using a distance-driven search
-  for (;;) {
-    i64 nearest_node_idx = -1;
-    f64 nearest_dist = -1;
-
-    // Evaluate all edges to find the nearest unvisited node
-    for (i64 i = 0; i < MAX_NUM_EDGES; ++i) {
-      if (!validate_edge(i))
-        continue;
-
-      Edge edge = edges[i];
-      Node node0 = nodes[edge.src];
-      Node node1 = nodes[edge.dst];
-      f64 length = get_distance(node0.x, node0.y, node1.x, node1.y);
-
-      // Look for unvisited nodes on both ends of the edge
-      if (node0.distance >= 0 && node1.distance < 0) {
-        if (nearest_node_idx < 0 || node0.distance + length < nearest_dist) {
-          nearest_node_idx = edge.dst;
-          nearest_dist = node0.distance + length;
-        }
-      }
-      if (node1.distance >= 0 && node0.distance < 0) {
-        if (nearest_node_idx < 0 || node1.distance + length < nearest_dist) {
-          nearest_node_idx = edge.src;
-          nearest_dist = node1.distance + length;
-        }
-      }
-    }
-
-    // If no further nodes can be found, exit the loop
-    if (nearest_node_idx < 0)
-      break;
-
-    nodes[nearest_node_idx].distance = nearest_dist;
-
-    // Stop if we've reached the destination
-    if (nearest_node_idx == dst)
-      break;
-  }
-
-  // If no path was found, alert the user
-  if (nodes[dst].distance < 0) {
-    printf("Path not found\n");
-    return;
-  }
-
-  // Backtrack from destination to reconstruct the path
-  f64 dist = nodes[dst].distance;
-  i64 curr_node_idx = dst;
-
-  while (curr_node_idx != src) {
-    i64 next_node_idx = -1;
-    i64 edge_to_highlight = -1;
-
-    // Check all edges to find the next node in the path
-    for (i64 i = 0; i < MAX_NUM_EDGES; ++i) {
-      if (!validate_edge(i))
-        continue;
-
-      Edge edge = edges[i];
-      Node node0 = nodes[edge.src];
-      Node node1 = nodes[edge.dst];
-
-      f64 l = get_distance(node0.x, node0.y, node1.x, node1.y);
-			
-      // Check for the nearest node along the current path
-      if (edge.src == curr_node_idx && node1.distance >= 0 &&
-          node1.distance < node1.distance < (dist < 0 || node1.distance + l < dist)) {
-        next_node_idx = edge.dst;
-        edge_to_highlight = i;
-        dist = node1.distance;
-      }
-      if (edge.dst == curr_node_idx && node0.distance >= 0 &&
-          node0.distance < (dist < 0 || node0.distance + l < dist)) {
-        next_node_idx = edge.src;
-        edge_to_highlight = i;
-        dist = node0.distance;
-      }
-    }
-
-    // If no next node is found, there's an error
-    if (next_node_idx < 0) {
-      printf("Internal error\n");
-      break;
-    }
-
-    // Highlight the current node and edge as part of the path
-    nodes[next_node_idx].highlight = 1;
-    edges[edge_to_highlight].highlight = 1;
-
-    // Move to the next node in the path
-    curr_node_idx = next_node_idx;
   }
 }
 
@@ -172,6 +64,8 @@ i32 main() {
 
   b8 dragging = 0;
   i64 drag_node_index = -1;
+  f64 drag_x0 = 0;
+  f64 drag_y0 = 0;
 
   f64 offset_x = 0;
   f64 offset_y = 0;
@@ -182,18 +76,18 @@ i32 main() {
     i32 num_nodes = readInt(n);
 
     for (i64 i = 0; i < num_nodes; ++i) {
-			f64 x = readInt(n);
-			f64 y = readInt(n);
-			
+      f64 x = readInt(n);
+      f64 y = readInt(n);
+
       add_node(x, y);
     };
 
     i32 num_edges = readInt(n);
 
     for (i64 i = 0; i < num_edges; ++i) {
-			i32 src = readInt(n);
-			i32 dst = readInt(n);
-			
+      i32 src = readInt(n);
+      i32 dst = readInt(n);
+
       add_edge(src, dst);
     };
 
@@ -210,7 +104,7 @@ i32 main() {
 
     if (platform.key_pressed[BUTTON_RIGHT])
       for (i64 i = 0; i < MAX_NUM_NODES; ++i) {
-        if (nodes[i].enabled && nodes[i].hover) {
+        if (graph.nodes[i].enabled && graph.nodes[i].hover) {
           adding_edge = 1;
           adding_src = i;
           adding_dst = i;
@@ -224,13 +118,21 @@ i32 main() {
       b8 node_found = 0;
 
       for (i64 i = 0; i < MAX_NUM_NODES; ++i) {
-        if (nodes[i].enabled && nodes[i].hover) {
+        if (graph.nodes[i].enabled && graph.nodes[i].hover) {
           drag_node_index = i;
           dragging = 1;
           node_found = 1;
 
-          offset_x = nodes[i].x - platform.cursor_x;
-          offset_y = nodes[i].y - platform.cursor_y;
+          drag_x0 = platform.cursor_x;
+          drag_y0 = platform.cursor_y;
+
+          for (i64 j = 0; j < MAX_NUM_NODES; ++j) {
+            graph.nodes[j].drag_x = graph.nodes[j].x;
+            graph.nodes[j].drag_y = graph.nodes[j].y;
+          }
+
+          /* offset_x = nodes[i].x - platform.cursor_x; */
+          /* offset_y = nodes[i].y - platform.cursor_y; */
         }
       }
 
@@ -246,29 +148,37 @@ i32 main() {
     }
 
     if (dragging) {
-      b8 overlap = 0;
+      f64 dx = platform.cursor_x - drag_x0;
+      f64 dy = platform.cursor_y - drag_y0;
 
-      for (i64 j = 0; j < MAX_NUM_NODES; ++j) {
-        if (j == drag_node_index)
+      graph.nodes[drag_node_index].x = graph.nodes[drag_node_index].drag_x + dx;
+      graph.nodes[drag_node_index].y = graph.nodes[drag_node_index].drag_y + dy;
+
+      for (i64 i = 0; i < MAX_NUM_NODES; ++i) {
+        b8 is_neighbor = 0;
+
+        if (i == drag_node_index)
           continue;
 
-        Node n2 = nodes[j];
-        if (!n2.enabled) {
-          continue;
+        for (i64 j = 0; j < MAX_NUM_EDGES; ++j) {
+          Edge e = graph.edges[j];
+          if ((e.src == drag_node_index && e.dst == i) ||
+              (e.src == i && e.dst == drag_node_index)) {
+            is_neighbor = 1;
+            break;
+          }
         }
 
-        if (fabs(platform.cursor_x + offset_x - n2.x) < 50 + n2.radius &&
-            fabs(platform.cursor_y + offset_y - n2.y) < 50 + n2.radius) {
-          printf("Error: Cannot add node, overlapping nodes detected.\n");
-
-          overlap = 1;
+        if (is_neighbor) {
+          graph.nodes[i].x = graph.nodes[i].drag_x + dx * .4;
+          graph.nodes[i].y = graph.nodes[i].drag_y + dy * .4;
         }
       }
 
-      if (!overlap) {
-        nodes[drag_node_index].x = platform.cursor_x + offset_x;
-        nodes[drag_node_index].y = platform.cursor_y + offset_y;
-      }
+      /* if (!overlap) { */
+      /* graph.nodes[drag_node_index].x = platform.cursor_x + offset_x; */
+      /* graph.nodes[drag_node_index].y = platform.cursor_y + offset_y; */
+      /* } */
     }
 
     if (platform.key_pressed[KEY_DELETE]) {
@@ -277,16 +187,16 @@ i32 main() {
     }
 
     for (i64 i = 0; i < MAX_NUM_NODES; ++i) {
-      if (nodes[i].enabled) {
+      if (graph.nodes[i].enabled) {
         update_node(i);
-        if (nodes[i].hover)
+        if (graph.nodes[i].hover)
           hover_node = 1;
       }
     }
 
     for (i64 i = 0; i < MAX_NUM_EDGES; ++i) {
       if (hover_node) {
-        edges[i].hover = 0;
+        graph.edges[i].hover = 0;
       } else {
         update_edge(i);
       }
@@ -294,7 +204,7 @@ i32 main() {
 
     if (platform.key_pressed[BUTTON_RIGHT])
       for (i64 i = 0; i < MAX_NUM_NODES; ++i) {
-        if (nodes[i].enabled && nodes[i].hover) {
+        if (graph.nodes[i].enabled && graph.nodes[i].hover) {
           adding_edge = 1;
           adding_src = i;
           adding_dst = i;
@@ -303,8 +213,8 @@ i32 main() {
       }
 
     if (adding_edge) {
-      f64 x0 = nodes[adding_src].x;
-      f64 y0 = nodes[adding_src].y;
+      f64 x0 = graph.nodes[adding_src].x;
+      f64 y0 = graph.nodes[adding_src].y;
       f64 x1 = platform.cursor_x;
       f64 y1 = platform.cursor_y;
 
@@ -313,7 +223,7 @@ i32 main() {
 
     if (adding_edge)
       for (i64 i = 0; i < MAX_NUM_NODES; ++i)
-        if (nodes[i].enabled && nodes[i].hover) {
+        if (graph.nodes[i].enabled && graph.nodes[i].hover) {
           adding_dst = i;
           break;
         }
@@ -326,7 +236,7 @@ i32 main() {
     // Finding shortest path //
     if (platform.key_pressed['1']) {
       for (i64 i = 0; i < MAX_NUM_NODES; ++i)
-        if (nodes[i].enabled && nodes[i].hover) {
+        if (graph.nodes[i].enabled && graph.nodes[i].hover) {
           path_src = i;
           path_changed = 1;
           break;
@@ -335,14 +245,14 @@ i32 main() {
 
     if (platform.key_pressed['2'])
       for (i64 i = 0; i < MAX_NUM_NODES; ++i)
-        if (nodes[i].enabled && nodes[i].hover) {
+        if (graph.nodes[i].enabled && graph.nodes[i].hover) {
           path_dst = i;
           path_changed = 1;
           break;
         }
 
     if (path_changed) {
-      highlight_path(path_src, path_dst);
+      highlight_path(&graph, path_src, path_dst);
       path_changed = 0; // FIXME: if enabled, highlight isn't showing
     }
 
@@ -359,18 +269,18 @@ i32 main() {
     writeInt(n, nodes_count());
 
     for (i64 i = 0; i < MAX_NUM_NODES; ++i) {
-      if (nodes[i].enabled) {
-        writeInt(n, (i32)nodes[i].x);
-        writeInt(n, (i32)nodes[i].y);
+      if (graph.nodes[i].enabled) {
+        writeInt(n, (i32)graph.nodes[i].x);
+        writeInt(n, (i32)graph.nodes[i].y);
       }
     };
 
     writeInt(n, edges_count());
 
     for (i64 i = 0; i < MAX_NUM_EDGES; ++i) {
-      if (edges[i].enabled) {
-        writeInt(n, edges[i].src);
-        writeInt(n, edges[i].dst);
+      if (graph.edges[i].enabled) {
+        writeInt(n, graph.edges[i].src);
+        writeInt(n, graph.edges[i].dst);
       }
     };
 
